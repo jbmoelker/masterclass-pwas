@@ -5,6 +5,7 @@ const path = require('path');
 const revConfig = require('./lib/rev-config');
 const revUrl = require('./lib/rev-url');
 const shrinkRay = require('shrink-ray');
+const timings = require('server-timings');
 const urlParser = require('url');
 
 const app = express();
@@ -13,6 +14,8 @@ const config = {
     cacheDir: 'cache/',
     port: process.env.PORT || 7924
 };
+
+app.use(timings);
 
 /**
  * Pretty URLs:
@@ -23,7 +26,7 @@ app.use('*/index.html', (req, res) => res.redirect(301, `${path.dirname(req.orig
 /**
  * Performance tuning for entire app:
  * - Enable validating cached responses using `etag`s: https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching#validating_cached_responses_with_etags
- * - Remove unneeded headers ('X-Powered-By', 'lastMofied') to safe bytes
+ * - Remove unneeded headers ('X-Powered-By', 'lastModified') to safe bytes
  * - Set immutable headers on revisioned files with `revConfig.pattern`: https://bitsup.blogspot.nl/2016/05/cache-control-immutable.html
  * - Enable dynamic gzip and Brotli compression using Shrink-ray: https://github.com/aickin/shrink-ray
  * - Serve (revisioned) files from `cacheDir` when available.
@@ -31,7 +34,9 @@ app.use('*/index.html', (req, res) => res.redirect(301, `${path.dirname(req.orig
 app.set('etag', true);
 app.use((req, res, next) => { res.removeHeader('X-Powered-By'); next(); });
 app.use(revConfig.pattern, (req, res, next) => { res.setHeader('Cache-Control', 'max-age=365000000, immutable'); next(); });
+app.use(timings.start('Compress'));
 app.use(shrinkRay());
+app.use(timings.end('Compress'));
 app.use(express.static(path.join(__dirname, config.cacheDir), { index: false, lastModified: false }));
 
 /**
@@ -56,6 +61,7 @@ const renderer = nunjucks.configure(config.baseDir, {
 });
 renderer.addGlobal('revUrl', revUrl);
 
+app.use(timings.start('Render'));
 app.get('*', (req, res, next) => {
     const filename = path.join(req.path, 'index.html');
     console.log(`${config.baseDir}${filename}`);
@@ -80,6 +86,7 @@ app.get('*', (req, res, next) => {
         next();
     }
 });
+app.use(timings.end('Render'));
 
 
 app.listen(config.port, (err) => {
