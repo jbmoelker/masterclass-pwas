@@ -1,5 +1,7 @@
+const cacheControlImmutable = require('./lib/cache-control-immutable');
 const express = require('express');
 const fs = require('fs');
+const helmet = require('helmet');
 const nunjucks = require('nunjucks');
 const path = require('path');
 const revConfig = require('./lib/rev-config');
@@ -23,14 +25,14 @@ app.use('*/index.html', (req, res) => res.redirect(301, `${path.dirname(req.orig
 /**
  * Performance tuning for entire app:
  * - Enable validating cached responses using `etag`s: https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/http-caching#validating_cached_responses_with_etags
- * - Remove unneeded headers ('X-Powered-By', 'lastMofied') to safe bytes
+ * - Remove unneeded headers ('X-Powered-By' (done by Helmet), 'lastMofied') to safe bytes
  * - Set immutable headers on revisioned files with `revConfig.pattern`: https://bitsup.blogspot.nl/2016/05/cache-control-immutable.html
  * - Enable dynamic gzip and Brotli compression using Shrink-ray: https://github.com/aickin/shrink-ray
  * - Serve (revisioned) files from `cacheDir` when available.
  */
 app.set('etag', true);
-app.use((req, res, next) => { res.removeHeader('X-Powered-By'); next(); });
-app.use(revConfig.pattern, (req, res, next) => { res.setHeader('Cache-Control', 'max-age=365000000, immutable'); next(); });
+app.use(helmet());
+app.use(revConfig.pattern, cacheControlImmutable);
 app.use(shrinkRay());
 app.use(express.static(path.join(__dirname, config.cacheDir), { index: false, lastModified: false }));
 
