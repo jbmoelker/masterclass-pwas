@@ -2,19 +2,30 @@ const cacheControlImmutable = require('./lib/cache-control-immutable');
 const express = require('express');
 const fs = require('fs');
 const helmet = require('helmet');
+const http = require('http');
+const http2 = require('http2');
 const nunjucks = require('nunjucks');
 const path = require('path');
+const resPushAssets = require('./lib/res-push-assets');
 const revConfig = require('./lib/rev-config');
 const revUrl = require('./lib/rev-url');
 const shrinkRay = require('shrink-ray');
+const spdy = require('spdy');
 const urlParser = require('url');
 
 const app = express();
 const config = {
     baseDir: 'src/',
     cacheDir: 'cache/',
-    port: process.env.PORT || 7924
+    port: process.env.PORT || 7924,
+    ssl: {
+        key: fs.readFileSync(`${__dirname}/config/localhost.key`),
+        cert: fs.readFileSync(`${__dirname}/config/localhost.crt`),
+    }
 };
+const serverH1 = http.createServer(app);
+const serverH2 = http2.createSecureServer(config.ssl, app);
+const serverSpdy = spdy.createServer(config.ssl, app);
 
 /**
  * Pretty URLs:
@@ -69,6 +80,9 @@ app.get('*', (req, res, next) => {
                 if (err) {
                     res.status(500).send('Internal Server Error')
                 }
+                // const pushStream = res.push(url, { request: { accept: '*/*' }, response: { 'content-type': 'text/css' } });
+                // pushStream.end('body { background: red !important; }')
+                resPushAssets(res, html);
                 res.send(html);
             });
         }
@@ -84,6 +98,12 @@ app.get('*', (req, res, next) => {
 });
 
 
-app.listen(config.port, (err) => {
-    err ? console.error(err) : console.log(`app running on http://localhost:${config.port}`);
+serverH1.listen(config.port, (err) => {
+    err ? console.error(err) : console.log(`App served over HTTP/1 on http://localhost:${config.port}`);
+});
+serverH2.listen(config.port + 1, (err) => {
+    err ? console.error(err) : console.log(`App served over HTTP/2 on https://localhost:${config.port + 1}`);
+});
+serverSpdy.listen(config.port + 2, (err) => {
+    err ? console.error(err) : console.log(`App served over SPDY/H2 on https://localhost:${config.port + 2}`);
 });
