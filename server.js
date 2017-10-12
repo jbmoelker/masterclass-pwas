@@ -1,3 +1,4 @@
+const clientHintsAsImage = require('./lib/client-hints-as-image');
 const cacheControlImmutable = require('./lib/cache-control-immutable');
 const express = require('express');
 const fs = require('fs');
@@ -33,6 +34,7 @@ app.use('*/index.html', (req, res) => res.redirect(301, `${path.dirname(req.orig
 app.set('etag', true);
 app.use(helmet());
 app.use(revConfig.pattern, cacheControlImmutable);
+app.use(/.*\.(jpg|png)/, clientHintsAsImage())
 app.use(shrinkRay());
 app.use(express.static(path.join(__dirname, config.cacheDir), { index: false, lastModified: false }));
 
